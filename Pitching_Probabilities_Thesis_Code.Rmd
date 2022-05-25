@@ -1,0 +1,534 @@
+---
+title: "Pitching the Probabilities Code"
+output: html_notebook
+---
+
+By: Amanda Poor
+
+Below is the necessary code I used to create the output for the probabilities, statistic test, and visual. Please reference the formal documentation of my report found on my personal website https://amandapoor.net
+
+```{r}
+#load packages 
+library(dplyr)
+library(tidyr)
+library(EnvStats)
+```
+
+```{r}
+#below is the dataset that has been created through merging each MLB's team pitch data from the 2021 regular season only including innings 1-9. 
+
+#save the regseason.csv to your computer and then uncomment line 17 to select the dataset. 
+#regseason<-read.csv(file.choose())
+
+regseason
+```
+
+```{r}
+#package 'dplyr' used to mutate the dataframe
+# creation of a 'count' variable, combining the existing balls and strikes variables
+
+regseason<-regseason %>%
+  mutate(regseason, 
+         count = ifelse(regseason$balls=="3" & regseason$strikes=="2","3_2",
+                    ifelse(regseason$balls=="3" & regseason$strikes=="1","3_1",
+                        ifelse(regseason$balls=="3" & regseason$strikes=="0","3_0",
+                            ifelse(regseason$balls=="2" & regseason$strikes=="2","2_2",
+                                ifelse(regseason$balls=="2" & regseason$strikes=="1","2_1",
+                                    ifelse(regseason$balls=="2" & regseason$strikes=="0","2_0",
+                                        ifelse(regseason$balls=="1" & regseason$strikes=="2","1_2",
+                                            ifelse(regseason$balls=="1" & regseason$strikes=="1","1_1",
+                                                ifelse(regseason$balls=="1" & regseason$strikes=="0","1_0",
+                                                    ifelse(regseason$balls=="0" & regseason$strikes=="2","0_2",
+                                                        ifelse(regseason$balls=="0" & regseason$strikes=="1","0_1",
+                                                            ifelse(regseason$balls=="0" & regseason$strikes=="0","0_0", NA)))))))))))))   %>%
+# creation of the variable 'PBhand' (pitcher/batter handedness; bats R/L, pitches R/L)  
+  mutate(regseason, PBhand = ifelse(regseason$stand=="R" & regseason$p_throws=="R","bRpR",
+                                                ifelse(regseason$stand=="R" & regseason$p_throws=="L","bRpL",
+                                                       ifelse(regseason$stand=="L" & regseason$p_throws=="R","bLpR",
+                                                            ifelse(regseason$stand=="L" & regseason$p_throws=="L","bLpL", NA)))))
+ 
+```
+
+```{r}
+#creation of the 'pitch_cat' variable which categorizes the pitch types into MLB's pitch categories (fastball, breaking, offspeed)
+
+regseason<- regseason %>% mutate(pitch_cat = 
+                                  ifelse(regseason$pitch_type == "FC" | regseason$pitch_type == "FF" | regseason$pitch_type == "FA"
+                                   | regseason$pitch_type == "SI", "fastball", 
+                                        ifelse(regseason$pitch_type == "CH" | regseason$pitch_type == "KN" | 
+                                         regseason$pitch_type == "FS", "offspeed", 
+                                              ifelse(regseason$pitch_type == "KC" | regseason$pitch_type == "SL"
+                                               | regseason$pitch_type == "CU" | regseason$pitch_type == "CS", "breaking", NA))))
+
+```
+
+
+```{r}
+# selection of the top pitch outcome descriptions; outcomes which had very few instances were dropped
+
+reg.description<- regseason[regseason$description %in% c("ball", "foul", "hit_into_play", "called_strike", "swinging_strike", "foul_tip"), ]
+```
+
+```{r}
+# creation of the 'p_outcome' variable, which separates the pitch descriptions selected above into either a desirable or undesirable outcome from the pitchers perspective. 
+
+reg.outcome<-reg.description %>%
+  mutate(p_outcome = ifelse(reg.description$description == "hit_into_play" & (reg.description$events == "single" | reg.description$events == "double"
+                        | reg.description$events == "triple" | reg.description$events == "home_run"), "undesirable", 
+                      
+                            ifelse(reg.description$description == "hit_into_play" & 
+                                (reg.description$events == "force_out" | reg.description$events == "field_out") , "desirable", 
+                              
+                                  ifelse(reg.description$description == "foul" | reg.description$description == "foul_tip", "desirable",
+                                           
+                                        ifelse(reg.description$description == "called_strike" | 
+                                            reg.description$description == "swinging_strike", "desirable", 
+                                              
+                                               ifelse(reg.description$description == "ball", "undesirable", NA))))))
+
+```
+```{r}
+# converts the following variables into factor variables
+
+reg.outcome$p_outcome <- as.factor(reg.outcome$p_outcome)
+reg.outcome$PBhand <- as.factor(reg.outcome$PBhand)
+reg.outcome$pitch_type <- as.factor(reg.outcome$pitch_cat)
+reg.outcome$count <- as.factor(reg.outcome$count)
+
+```
+
+```{r}
+
+#subset dataframe of regseason containing varialbes of interest
+
+reg.outcome2=subset(reg.outcome, select=c("pitch_type", "pitch_cat", "stand", "p_throws", "PBhand","balls", "strikes", "count", "description","p_outcome"))
+
+#drop na from selected variables
+
+reg.outcome<-reg.outcome2 %>% drop_na("PBhand", "p_outcome", "count", "pitch_cat")
+```
+
+
+
+
+____________________________________________________________________
+____________________________________________________________________
+
+Creation of Proportions
+
+- Proportions were made as they are necessary for computation of Probabilities
+
+
+```{r}
+#total number of right handed pitchers at each count
+
+total_RHP<-reg.outcome %>% 
+  filter(PBhand == "bRpR" | PBhand =="bLpR" )%>%
+  drop_na(pitch_cat, PBhand, count, p_outcome) %>%
+  group_by(count) %>% 
+  summarize(Total_RHP = n()) %>%
+  group_by(count)
+total_RHP
+```
+```{r}
+#total number of desirable right handed pitches at each count
+
+total_D_RHP<-reg.outcome %>% 
+  filter(p_outcome== "desirable" & (PBhand == "bRpR" | PBhand =="bLpR") )%>%
+  drop_na(pitch_cat, PBhand, count, p_outcome) %>%
+  group_by(count) %>% 
+  summarize(Total_D_RHP = n()) %>%
+  group_by(count) 
+total_D_RHP
+```
+
+```{r}
+#combine total RHP and total desirable RHP, factored by count
+D_RHP_Prop<- merge(total_RHP, total_D_RHP, by = c("count")) 
+
+#creation of proportions for desirable outcomes by RHP
+D_RHP_Prop$D_RHP_Prop <- D_RHP_Prop$Total_D_RHP/D_RHP_Prop$Total_RHP
+D_RHP_Prop
+```
+
+```{r}
+#desirable right handed pitches identity matrix
+
+#take 'D_RHP_Prop' variable above and convert to matrix
+D_RHP_Prop_matrix <- data.matrix(D_RHP_Prop$D_RHP_Prop)
+#transpose matrix and convert to vector
+D_RHP_Prop_T_matrix<-t(D_RHP_Prop_matrix)
+D_RHP_Prop_vector<-as.vector(D_RHP_Prop_T_matrix)
+
+#'D_RHP_Prop_vector' has to be a vector; 12x12 identity matrix; 'D_RHP_Prop' proportions along diagonal of identity matrix
+D_RHP_Prop_I_matrix<-matrix(diag(D_RHP_Prop_vector), ncol=12)
+D_RHP_Prop_I_matrix
+```
+
+
+
+```{r}
+#total number of undesirable right handed pitches 
+
+total_UD_RHP<-reg.outcome %>% 
+  filter(p_outcome== "undesirable" & (PBhand == "bRpR" | PBhand =="bLpR") )%>%
+  drop_na(pitch_cat, PBhand, count, p_outcome) %>%
+  group_by(count) %>% 
+  summarize(Total_UD_RHP = n()) %>%
+  group_by(count) 
+```
+
+
+```{r}
+#same code as above but for undesirable outcomes
+
+UD_RHP_Prop <- merge(total_RHP, total_UD_RHP, by = c("count")) 
+UD_RHP_Prop$UD_RHP_Prop <- UD_RHP_Prop$Total_UD_RHP/UD_RHP_Prop$Total_RHP
+UD_RHP_Prop
+```
+
+
+```{r}
+#undesirable right handed pitches identity matrix
+
+UD_RHP_Prop_matrix <- data.matrix(UD_RHP_Prop$UD_RHP_Prop)
+UD_RHP_Prop_T_matrix<-t(UD_RHP_Prop_matrix)
+UD_RHP_Prop_vector<-as.vector(UD_RHP_Prop_T_matrix)
+
+# 12x12 identity matrix made using the undesirable RHP proportions from UD_RHP_Prop dataframe
+
+UD_RHP_Prop_I_matrix<-matrix(diag(UD_RHP_Prop_vector), ncol=12)
+UD_RHP_Prop_I_matrix
+```
+
+
+Notice how both the desirable and undesirable proportions for each count add to 100%. This makes sense as they are proportions for the pitch outcomes
+
+I will now show the code for the bRpR 'PBhand' instances. It is the same for each of the other 'PBhand' factors
+
+____________________________________
+
+Bats Right Pitches Right
+
+The following code demonstrates how to create the 3x12 matrices for bRpR. After the 3x12 matrix will be multiplied by the identity matrices above and then will be made into probabilities of a desirable outcome occurring for the bRpR instance
+
+
+```{r}
+reg.desirable <- reg.outcome[reg.outcome$p_outcome == "desirable" , ] 
+
+#select bRpR instance from desirable outcomes
+reg.des.Pitch.bRpR <- reg.desirable[reg.desirable$PBhand == "bRpR", ]   
+
+#create table pitch_cat by count
+reg.des.Pitch.bRpR.count<-table(reg.des.Pitch.bRpR$pitch_cat, reg.des.Pitch.bRpR$count)
+
+#round the values to 2 decimal places
+reg.des.Pitch.bRpR.count.prop<-round(prop.table(reg.des.Pitch.bRpR.count,2)*100,digits=2)
+reg.des.Pitch.bRpR.count.prop
+```
+
+
+
+```{r}
+#proportions of count distributions
+
+#convert proportions to matrix
+reg.des.Pitch.bRpR.count.matrix<-as.matrix(reg.des.Pitch.bRpR.count.prop)
+
+#multiply 3x12 bRpR matrix by desirable RHP identity matrix
+reg.des.pitch.bRpR.count.prop<-reg.des.Pitch.bRpR.count.matrix %*% D_RHP_Prop_I_matrix
+
+#add column names (count)
+colnames(reg.des.pitch.bRpR.count.prop) <- c('0-0', '0-1', '0-2', '1-0', '1-1', '1-2', '2-0', '2-1', '2-2', '3-0', '3-1', '3-2')
+reg.des.pitch.bRpR.count.prop
+```
+
+```{r}
+# same done for undesirable bRpR
+
+reg.undesirable <- reg.outcome[reg.outcome$p_outcome == "undesirable", ] 
+reg.undes.Pitch.bRpR <- reg.undesirable[reg.undesirable$PBhand == "bRpR", ]   
+
+reg.undes.Pitch.bRpR.count<-table(reg.undes.Pitch.bRpR$pitch_cat, reg.undes.Pitch.bRpR$count)
+
+reg.undes.Pitch.bRpR.count.prop<-round(prop.table(reg.undes.Pitch.bRpR.count,2)*100,digits=2)
+```
+
+```{r}
+#creation of undesirable bRpR matrix
+
+reg.undes.Pitch.bRpR.count.matrix<-as.matrix(reg.undes.Pitch.bRpR.count.prop)
+
+reg.undes.pitch.bRpR.count.prop<-reg.undes.Pitch.bRpR.count.matrix %*% UD_RHP_Prop_I_matrix
+
+colnames(reg.undes.pitch.bRpR.count.prop) <- c('0-0', '0-1', '0-2', '1-0', '1-1', '1-2', '2-0', '2-1', '2-2', '3-0', '3-1', '3-2')
+reg.undes.pitch.bRpR.count.prop
+```
+
+
+
+Probabilities for bRpR 
+```{r}
+#change name of variable; proportions for desirable pitches thrown for bRpR
+prop.matrix.D.bRpR<-reg.des.pitch.bRpR.count.prop
+#change name of variable; proportions for undesirable pitches thrown for bRpR
+prop.matrix.U.bRpR<-reg.undes.pitch.bRpR.count.prop
+
+#normalize the matrices
+#creation of the probabilities; probability of a desirable outcome occuring given it is a bRpR instance
+
+normal.D.matrix.bRpR<-prop.matrix.D.bRpR/(prop.matrix.D.bRpR + prop.matrix.U.bRpR)
+normal.D.matrix.bRpR
+```
+These are the probabilities that will be tested using a Chi Square Test to see if the distributions of the probabilites are statistically different from a uniform distribution (average probability of the three probabilities (each pitch_cat) by count)
+
+
+
+Statistical tests
+_____________________________________________
+_____________________________________________
+
+
+Chi Squared Test
+
+
+#lines 293-323 are for readers understanding of n-value breakdown; not used in actual chi squared test code
+
+```{r}
+#n-values for desirable bRpR
+
+chi_D_bRpR<-reg.outcome %>% 
+  filter(p_outcome== "desirable" & PBhand == "bRpR" )%>%
+  drop_na(pitch_cat,PBhand, count, p_outcome) %>%
+  group_by(count,pitch_cat) %>%
+  summarize(D_bRpR = n()) %>%
+  group_by(count,pitch_cat)
+chi_D_bRpR
+```
+
+```{r}
+#n-values for undesirable bRpR 
+
+chi_U_bRpR<-reg.outcome %>% 
+  filter(p_outcome== "undesirable" & PBhand == "bRpR" )%>%
+  drop_na(pitch_cat,PBhand, count, p_outcome) %>%
+  group_by(count,pitch_cat) %>%
+  summarize(U_bRpR = n()) %>%
+  group_by(count,pitch_cat) 
+chi_U_bRpR
+```
+
+```{r}
+#take U_bRpR and add column to existing chi_D_bRpR, then change to new dataframe name
+
+chi_D_bRpR$U_bRpR <- chi_U_bRpR$U_bRpR
+chi_bRpR_totals<-chi_D_bRpR
+chi_bRpR_totals
+```
+
+
+```{r}
+
+#code to be used in chi squared test on data
+
+chi_bRpR<-reg.outcome %>% 
+  filter(PBhand == "bRpR" )%>%
+  drop_na(pitch_cat,PBhand, count, p_outcome) %>%
+  group_by(count,pitch_cat)
+#select rows
+chi_bRpR<-chi_bRpR[,c(2,8,10)]
+chi_bRpR
+```
+
+Now for the chi-square test; need to make a contingency table
+
+```{r}
+#0-0 count
+#filter dataframe above for 0_0 count
+chi_bRpR_0_0<-chi_bRpR%>% 
+  filter(count=="0_0")
+
+table(chi_bRpR_0_0$pitch_cat, chi_bRpR_0_0$p_outcome)
+
+#code for test; test passes n-values shown in table above for determination of p-value
+chisq.test(chi_bRpR_0_0$pitch_cat, chi_bRpR_0_0$p_outcome)
+```
+#p-value shows that there is a statistically significant difference in the distributions of the probabilites by count compared to a uniform distributioun. 
+#p-value needed to be less than 0.05 to be considered significantly different
+
+```{r}
+#0-1 count
+chi_bRpR_0_1<-chi_bRpR%>% 
+  filter(count=="0_1")
+
+table(chi_bRpR_0_1$pitch_cat, chi_bRpR_0_1$p_outcome)
+chisq.test(chi_bRpR_0_1$pitch_cat, chi_bRpR_0_1$p_outcome)
+```
+
+#The other counts are not shown as they are the same; copy and paste and change filter(count=="0_1") to be count of interest
+#all p-values for each of the 12 counts were used in the visual below
+
+___________________________________________
+
+Pairwise Comparison of Proportion Test
+
+statistical test: Pairwise comparison for proportions
+Pairwise comparison means comparing all pairs of something. If I have three items A, B and C, that means comparing A to B, A to C, and B to C.
+
+In this case the test will be used to see if there is a statistically significant difference between fastball, breaking, offspeed probabilities within each count
+
+
+```{r}
+
+pitches_bRpR<-reg.outcome %>% 
+  filter(PBhand == "bRpR" )%>%
+  drop_na(pitch_cat, PBhand, count, p_outcome) %>%
+  group_by(count, pitch_cat)
+
+pitches_bRpR = subset(pitches_bRpR, select = c("count", "pitch_cat", "p_outcome"))
+pitches_bRpR
+```
+I will show how I got results for both the 0-0 and 0-1 counts. Again, the other counts can be found by just changing the count you would like to see
+
+```{r}
+
+ # Creates a new numeric variable that is p_outcome as a 0 or 1
+pitches_bRpR$p_outcome.n = as.numeric(pitches_bRpR$p_outcome) - 1 
+pitches_bRpR_0_0 <-pitches_bRpR %>% filter(count=="0_0")
+```
+
+```{r}
+#used for pairwise test
+pitchTab_bRpR_0_0<-xtabs( ~ pitch_cat + p_outcome, 
+       data=pitches_bRpR_0_0)
+round(prop.table(pitchTab_bRpR_0_0, margin = 1),5)
+```
+```{r}
+pairwise.prop.test(x = pitchTab_bRpR_0_0[,c("desirable","undesirable")])
+```
+
+Based on the results above, the F-B pair shows evidence of a significant difference between the probabilities (p < 0.05).
+
+I will now change the count to be 0-1
+```{r}
+
+ # Creates a new numeric variable that is p_outcome as a 0 or 1
+pitches_bRpR$p_outcome.n = as.numeric(pitches_bRpR$p_outcome) - 1 
+pitches_bRpR_0_1 <- pitches_bRpR %>% filter(count=="0_1")
+
+```
+
+```{r}
+
+pitchTab_bRpR_0_1<-xtabs( ~ pitch_cat + p_outcome, 
+       data=pitches_bRpR_0_1)
+
+round(prop.table(pitchTab_bRpR_0_1, margin = 1),5)
+```
+```{r}
+pairwise.prop.test(x = pitchTab_bRpR_0_1[,c("desirable","undesirable")])
+```
+
+Looking at the results for the 0_1 count, the F-B pair shows evidence of a significant difference between the probabilities. The other counts were done before creating the visual below. 
+
+
+____________________________________________________________________________________
+____________________________________________________________________________________
+
+ggplot visual
+
+I will now show how I created the visuals that are seen in my write up
+Below is the code I used to do so. I understand that there is probably a more consise way to do it however this is how I made it work.
+
+```{r}
+#dataframe taken from line 276; converts matrix to dataframe
+bRpR_D_matrix<-as.data.frame(normal.D.matrix.bRpR)
+bRpR_D_matrix
+
+#transpose matrix moving columns(count) to rows
+bRpR_D_T_matrix<-t(bRpR_D_matrix)
+
+#convert matrix to dataframe
+bRpR_D_df<-as.data.frame(bRpR_D_T_matrix)
+
+#make row names to its own column (count)
+bRpR_D_df <- data.frame(count = row.names(bRpR_D_df), bRpR_D_df, row.names=NULL)
+bRpR_D_df<-bRpR_D_df
+bRpR_D_df
+```
+
+```{r}
+#convert to data frame
+total.reg.bRpR.df<-as.data.frame(total.reg.bRpR)
+total.reg.bRpR.df
+```
+
+```{r}
+D_bRpR<-reg.outcome %>% 
+  filter(p_outcome== "desirable" & PBhand == "bRpR" )%>%
+  drop_na(pitch_cat,PBhand, count, p_outcome) %>%
+  group_by(count,pitch_cat) %>%
+  summarize(D_bRpR = n()) %>%
+  group_by(count,pitch_cat)
+D_bRpR
+```
+
+
+```{r}
+#library(tidyr)
+
+#move each of the pitch type columns to row factors
+bRpR_D_df.long<- pivot_longer(bRpR_D_df, cols=2:4, names_to = "Pitch_Type", values_to = "Prob_Desirable")
+bRpR_D_df.long
+
+
+#arrange pitch_type rows by factor
+bRpR_D_df2<- bRpR_D_df.long %>% arrange(count)
+bRpR_D_df2<-cbind(bRpR_D_df2, Total_bRpR=total.reg.bRpR.df$Freq, Total_D_bRpR = D_bRpR$D_bRpR)
+bRpR_D_df2
+```
+
+```{r}
+# 'bRpR_signif_vec' is used from the pairwise test results, needed for the asterick placed above certain bars in visual below
+#0 - no, 1 - yes
+bRpR_signif_vec<-c(0,1,0,0,1,0,0,1,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1)
+bRpR_signif_vec<- as.factor(bRpR_signif_vec)
+bRpR_D_df2$Significant <-bRpR_signif_vec
+bRpR_D_df2
+```
+Using the dataframe above, the visual below was created. 
+
+```{r, fig.width=4}
+
+plot_bRpR <- ggplot(bRpR_D_df2, aes(x = count, y = Prob_Desirable, fill = Pitch_Type)) +
+  geom_col(width=0.78,position = position_dodge(width=0.76),size=0.70, colour="black" ) +
+  scale_fill_brewer(palette="Paired")+
+  #below is how the "Significant" column wasn used to place astericks in the visual above respective bars
+  geom_text(aes(label = ifelse(Significant == "1", "*", ""), group = Pitch_Type), 
+            position = position_dodge(width = .9), vjust = 0.1, size = 20 / .pt, color="red")+
+  theme_light()+
+  labs(x = "Count, Total Pitches, Chi-Squared Results",
+       y="Probability of Desirable Pitch",
+       fill = "Pitch Type")+
+  theme(axis.text.x = element_text(hjust=0.5, size=9), axis.text = element_text(face="bold"), 
+        legend.position = c(.15, .98),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))+
+  ggtitle("Pitch Type by Count (Desirable Outcomes)", "Regular season pitches for bRpR ")+
+  ylim(c(0,1))
+
+#my own x-axis was created to accommodate the count, n-values, and chi squared test results. Results that are not shown for the chi-squared test are results that had a p-value less than 0.05. 
+
+plot_bRpR <- plot_bRpR + scale_x_discrete("Count, n-value, χ² Result", labels = c("0-0" = "0-0\nn=39155\n χ²=            ", "0-1" = "0-1\n18973", "0-2" = "0-2 \n8820", "1-0" = "1-0 \n15434\n0.425", "1-1" = "1-1 \n 15396\n0.072", "1-2" = "1-2 \n13734", "2-0" = "2-0 \n5301\n0.825", "2-1" = "2-1 \n8328\n0.834", "2-2" = "2-2 \n12933", "3-0" = "3-0 \n1641\n0.906", "3-1" = "3-1 \n3420", "3-2" = "3-2 \n8184"))
+plot_bRpR
+```
+
+
+
+This is the code I used for the bRpR category in the regular season. I used the same code for the other pitcher/batter handedness matchups however it is not shown to shorten the length of this notebook.
+
+Please review my formal write up of my project for more of an explanation on the process and statistic results. 
+
+You can view my project at https://amandapoor.net
+
