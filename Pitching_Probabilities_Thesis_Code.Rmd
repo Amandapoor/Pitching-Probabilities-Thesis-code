@@ -17,7 +17,7 @@ library(EnvStats)
 ```{r}
 #below is the dataset that has been created through merging each MLB's team pitch data from the 2021 regular season only including innings 1-9. 
 
-#save the regseason.csv to your computer and then uncomment line 17 to select the dataset. 
+#save the regseason.csv to your computer and then uncomment line 21 to select the dataset. 
 #regseason<-read.csv(file.choose())
 
 regseason
@@ -441,7 +441,7 @@ I will now show how I created the visuals that are seen in my write up
 Below is the code I used to do so. I understand that there is probably a more consise way to do it however this is how I made it work.
 
 ```{r}
-#dataframe taken from line 276; converts matrix to dataframe
+#dataframe taken from line 281; converts matrix to dataframe
 bRpR_D_matrix<-as.data.frame(normal.D.matrix.bRpR)
 bRpR_D_matrix
 
